@@ -29,28 +29,43 @@
     <Teleport to="body">
       <div v-if="showAddModal" class="modal-overlay" @click.self="closeModal">
         <div class="modal-card">
-          <h3 class="modal-title">{{ editingId ? '编辑记录' : '添加时刻记录' }}</h3>
+          <h3 class="modal-title">{{ editingId ? '编辑记录' : '选择记录类型' }}</h3>
 
-          <!-- Emoji 选择 -->
-          <div class="emoji-row">
+          <!-- 预设类型选择 -->
+          <div class="preset-grid">
             <button
-              v-for="e in emojiOptions"
-              :key="e"
-              class="emoji-btn"
-              :class="{ active: selectedEmoji === e }"
-              @click="selectedEmoji = e"
-            >{{ e }}</button>
+              v-for="preset in presets"
+              :key="preset.label"
+              class="preset-card"
+              :class="{ active: selectedPreset?.label === preset.label }"
+              @click="selectPreset(preset)"
+            >
+              <span class="preset-icon">{{ preset.emoji }}</span>
+              <span class="preset-label">{{ preset.label }}</span>
+            </button>
           </div>
 
-          <!-- 标签输入 -->
-          <div class="form-group">
-            <label>记录描述</label>
+          <!-- 自定义输入（选"自定义"时显示） -->
+          <div v-if="isCustomMode" class="form-group">
+            <label>自定义名称</label>
             <input
-              v-model="newLabel"
+              v-model="customLabel"
               class="form-input"
-              placeholder="例如：开始戒烟 / 上次撸管 / 开始健身..."
-              maxlength="30"
+              placeholder="输入你想记录的行为..."
+              maxlength="20"
             />
+          </div>
+          <div v-if="isCustomMode" class="form-group">
+            <label>图标</label>
+            <div class="emoji-row">
+              <button
+                v-for="e in emojiOptions"
+                :key="e"
+                class="emoji-btn"
+                :class="{ active: selectedEmoji === e }"
+                @click="selectedEmoji = e"
+              >{{ e }}</button>
+            </div>
           </div>
 
           <!-- 时间选择 -->
@@ -87,13 +102,70 @@ import TimerCard from '../components/timer/TimerCard.vue'
 const router = useRouter()
 const timerStore = useTimerStore()
 
+interface Preset {
+  label: string
+  emoji: string
+}
+
+const presets: Preset[] = [
+  { label: '撸管', emoji: '😤' },
+  { label: '学习', emoji: '📚' },
+  { label: '睡觉', emoji: '😴' },
+  { label: '醒来', emoji: '🌅' },
+  { label: '运动', emoji: '🏃' },
+  { label: '吃饭', emoji: '🍽️' },
+  { label: '工作', emoji: '💼' },
+  { label: '游戏', emoji: '🎮' },
+  { label: '洗澡', emoji: '🚿' },
+  { label: '刷手机', emoji: '📱' },
+  { label: '冥想', emoji: '🧘' },
+  { label: '自定义', emoji: '✍️' },
+]
+
 const showAddModal = ref(false)
+const selectedPreset = ref<Preset | null>(null)
+const isCustomMode = ref(false)
+const customLabel = ref('')
 const newLabel = ref('')
 const newDateTime = ref('')
 const selectedEmoji = ref('📌')
 const editingId = ref<string | null>(null)
 
-const emojiOptions = ['📌', '🚬', '💪', '❤️', '🎯', '⚡', '🌟', '🔥', '😤', '🧘', '🍺', '🎮', '💊', '✂️', '🏃']
+const emojiOptions = ['📌', '🚬', '💪', '❤️', '🎯', '⚡', '🌟', '🔥', '😤', '🧘', '🍺', '🎮', '💊', '✂️', '🏃', '💤', '☕', '🎵', '💻', '📖']
+
+const selectPreset = (preset: Preset) => {
+  selectedPreset.value = preset
+  if (preset.label === '自定义') {
+    isCustomMode.value = true
+    newLabel.value = ''
+    selectedEmoji.value = '📌'
+    customLabel.value = ''
+  } else {
+    isCustomMode.value = false
+    newLabel.value = preset.label
+    selectedEmoji.value = preset.emoji
+    customLabel.value = ''
+  }
+}
+
+const saveRecord = () => {
+  const finalLabel = isCustomMode.value ? customLabel.value.trim() : newLabel.value.trim()
+  if (!finalLabel || !newDateTime.value) {
+    alert('请选择记录类型并设置时间')
+    return
+  }
+  const isoStr = dayjs(newDateTime.value).toISOString()
+  if (editingId.value) {
+    timerStore.updateRecord(editingId.value, {
+      label: finalLabel,
+      recordedAt: isoStr,
+      emoji: selectedEmoji.value,
+    })
+  } else {
+    timerStore.addRecord(finalLabel, isoStr, selectedEmoji.value)
+  }
+  closeModal()
+}
 
 const sortedRecords = computed(() =>
   [...timerStore.records].sort((a, b) =>
@@ -108,32 +180,27 @@ const setNow = () => {
 const closeModal = () => {
   showAddModal.value = false
   editingId.value = null
+  selectedPreset.value = null
+  isCustomMode.value = false
   newLabel.value = ''
+  customLabel.value = ''
   newDateTime.value = ''
   selectedEmoji.value = '📌'
 }
 
-const saveRecord = () => {
-  if (!newLabel.value.trim() || !newDateTime.value) {
-    alert('请填写描述和时间')
-    return
-  }
-  const isoStr = dayjs(newDateTime.value).toISOString()
-  if (editingId.value) {
-    timerStore.updateRecord(editingId.value, {
-      label: newLabel.value.trim(),
-      recordedAt: isoStr,
-      emoji: selectedEmoji.value,
-    })
-  } else {
-    timerStore.addRecord(newLabel.value.trim(), isoStr, selectedEmoji.value)
-  }
-  closeModal()
-}
-
 const startEdit = (record: TimerRecord) => {
   editingId.value = record.id
-  newLabel.value = record.label
+  const matched = presets.find(p => p.label === record.label && p.emoji === record.emoji)
+  if (matched) {
+    selectedPreset.value = matched
+    isCustomMode.value = matched.label === '自定义'
+    newLabel.value = matched.label
+  } else {
+    selectedPreset.value = presets.find(p => p.label === '自定义') || null
+    isCustomMode.value = true
+    newLabel.value = ''
+    customLabel.value = record.label
+  }
   newDateTime.value = dayjs(record.recordedAt).format('YYYY-MM-DDTHH:mm:ss')
   selectedEmoji.value = record.emoji
   showAddModal.value = true
@@ -213,6 +280,50 @@ const startEdit = (record: TimerRecord) => {
 
 .modal-title {
   color: #fff; font-size: 1.1rem; margin: 0 0 16px; text-align: center;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  background: rgba(255,255,255,0.04);
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-card:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.preset-card.active {
+  border-color: #818cf8;
+  background: rgba(129,140,248,0.18);
+  transform: scale(1.03);
+}
+
+.preset-icon {
+  font-size: 1.8rem;
+}
+
+.preset-label {
+  color: rgba(255,255,255,0.85);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.preset-card.active .preset-label {
+  color: #fff;
 }
 
 .emoji-row {
