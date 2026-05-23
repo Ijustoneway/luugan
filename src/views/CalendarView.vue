@@ -30,6 +30,7 @@
           'has-diary': day.hasDiary,
           'selected': day.dateStr === selectedDate,
         }"
+        :style="{ background: getCellGradient(idx, day) }"
         @click="selectDay(day)"
       >
         <span class="day-num">{{ day.day }}</span>
@@ -146,6 +147,37 @@ const selectDay = (day: CalendarDay) => {
 const openDiary = (date: string) => {
   router.push(`/diary/${date}`)
 }
+
+// ========== 五彩渐变生成器 ==========
+// 每个格子拥有独一无二的色彩，按周排列 7 种色系
+const huePalettes = [
+  [340, 20],   // 第一周 → 粉紫-暖红
+  [10, 45],    // 第二周 → 橙-琥珀
+  [30, 75],    // 第三周 → 金黄-柠檬
+  [70, 160],   // 第四周 → 嫩绿-翡翠
+  [170, 220],  // 第五周 → 青蓝-海洋
+  [250, 310],  // 第六周 → 紫罗兰-薰衣草
+]
+
+const generateHSL = (h: number, s: number, l: number) => `hsl(${h},${s}%,${l}%)`
+
+const getCellGradient = (idx: number, _day: CalendarDay): string => {
+  const row = Math.floor(idx / 7)
+  const col = idx % 7
+  const palette = huePalettes[row] || huePalettes[5]
+
+  // 在色系范围内按列微调色相
+  const hueRange = palette[1] - palette[0]
+  const hue = palette[0] + (col / 6) * hueRange
+
+  // 饱和度在 45-65 之间浮动
+  const saturation = 45 + ((idx * 7) % 21)
+
+  // 明度在 22-38 之间浮动，保持深色基底
+  const lightness = 22 + ((idx * 13) % 17)
+
+  return `linear-gradient(135deg, ${generateHSL(Math.round(hue), saturation, lightness)}, ${generateHSL(Math.round(hue + 15), saturation + 8, lightness + 6)})`
+}
 </script>
 
 <style scoped>
@@ -221,42 +253,67 @@ const openDiary = (date: string) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   position: relative;
-  background: rgba(255,255,255,0.03);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
 .calendar-cell:active { transform: scale(0.9); }
 
 .day-num {
   font-size: 0.95rem;
-  color: #fff;
-  font-weight: 500;
+  color: rgba(255,255,255,0.92);
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  transition: all 0.15s;
 }
 
-.calendar-cell.other-month .day-num { color: rgba(255,255,255,0.2); }
+.calendar-cell.other-month {
+  opacity: 0.35;
+}
+
+.calendar-cell.other-month .day-num {
+  color: rgba(255,255,255,0.3);
+}
 
 .calendar-cell.today {
-  background: rgba(99, 102, 241, 0.3);
-  border: 1px solid rgba(99, 102, 241, 0.6);
+  outline: 2px solid rgba(255,255,255,0.7);
+  outline-offset: -2px;
+  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(255,255,255,0.15);
+  z-index: 2;
 }
 
-.calendar-cell.today .day-num { color: #818cf8; font-weight: 700; }
+.calendar-cell.today .day-num {
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+}
 
 .calendar-cell.selected {
-  background: rgba(99, 102, 241, 0.5);
-  border: 1px solid #818cf8;
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(255,255,255,0.25);
+  z-index: 1;
 }
 
-.calendar-cell.has-diary .day-num { color: #34d399; }
-
-.diary-dot {
-  font-size: 0.35rem;
-  color: #34d399;
+.calendar-cell.has-diary::after {
+  content: '';
   position: absolute;
   bottom: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255,255,255,0.6);
+}
+
+.diary-dot {
+  display: none;
+  /* 用 ::after 替代 */
 }
 
 .diary-preview {
